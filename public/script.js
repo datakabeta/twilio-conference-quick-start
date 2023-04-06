@@ -117,6 +117,8 @@
       // Twilio.Device.connect() returns a Call object
       const call = await device.connect({ params });
 
+      console.log("## call object rcvd", call);
+
 
 
       // add listeners to the Call
@@ -132,7 +134,7 @@
 
       holdButton.onclick = () => {
         log("Hanging up ...");
-        holdCall();
+        holdCall(call.parameters.CallSid);
       };
 
     } else {
@@ -142,8 +144,11 @@
 
 
   //place call on hold
-  async function holdCall(token, callSID) {
-    console.log("## hold call SID ", '_' + callSID);
+  async function holdCall(myCallSID) {
+    console.log("## from call SID ", myCallSID);
+
+    const holdResp = await $.post("/hold", {'requesterCallSID': myCallSID});
+    console.log("## Hold response", holdResp);
 
     //Add call to update participant API call to place call on hold
 
@@ -239,6 +244,8 @@
 
   function acceptIncomingCall(call) {
     call.accept();
+
+    console.log("Incoming call object: ", call);
 
     //get sync map status
     const syncStateIncomingCall = getSyncStatus(token, call.parameters.CallSid);

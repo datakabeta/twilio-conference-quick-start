@@ -1,6 +1,5 @@
 const Router = require("express").Router;
-const { tokenGenerator, voiceResponse } = require("./handler");
-const { eventHandler, participantEventsHandler, holdParticipant } = require("./conferenceOrchestrator");
+const { tokenGenerator, voiceResponse, confEventHandler, participantEventsHandler, holdParticipant } = require("./confOrchestrator");
 
 const router = new Router();
 
@@ -16,9 +15,9 @@ router.post("/voice", (req, res) => {
 });
 
 //CONF - handles conference webhook
-router.post("/events", (req, res) => {
+router.post("/confEvents", (req, res) => {
   // console.log("/events rcvd", req.body);
-  res.send(eventHandler(req.body, req.query.to));
+  res.send(confEventHandler(req.body, req.query.to));
 });
 
 //CONF - handles participant webhook
@@ -28,9 +27,9 @@ router.post("/participantEvents", (req, res) => {
 });
 
 //CONF - handles hold requests
-router.post("/holdParticipant", (req, res) => {
-  // console.log("/participantEvents received", req.body);
-  res.send(holdParticipant(req.body));
+router.post("/hold", (req, res) => {
+  console.log("/hold received from", req.body.requesterCallSID);
+  res.send(holdParticipant(req.body.requesterCallSID));
 });
 
 module.exports = router;

@@ -1,10 +1,15 @@
 ﻿@import url(https://fonts.googleapis.com/css?family=Share+Tech+Mono);
 
+
 body,
 p {
   padding: 0;
   margin: auto;
   font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  background-color: lightblue;
 }
 
 h1 {
