@@ -27,6 +27,13 @@ cfg.apiSecret = process.env.TWILIO_API_SECRET;
 cfg.authToken = process.env.TWILIO_AUTH_TOKEN;
 cfg.assetServiceSid = process.env.ASSETSERVICEID;
 cfg.syncServiceSid = process.env.SYNCSERVICEID;
+cfg.ngrokURL = process.env.NGROK_URL;
+
+cfg.dbHost = process.env.DB_HOST;
+cfg.dbUsername = process.env.DB_USERNAME;
+cfg.dbPwd = process.env.DB_PWD;
+
+
 
 // Export configuration object
 module.exports = cfg;

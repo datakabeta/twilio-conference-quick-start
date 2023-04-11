@@ -8,8 +8,9 @@ const config = require("../config");
 const client = require('twilio')(config.accountSid, config.authToken);
 let identity;
 
-const jsonDB = require('simple-json-db')
-const db = new jsonDB('./../assets/storage.json', {}); //initialize DB
+// const jsonDB = require('simple-json-db');
+// const db = new jsonDB('./storage.json'); //initialize DB ../assets/
+
 
 exports.tokenGenerator = function tokenGenerator() {
   identity = nameGenerator();
@@ -56,7 +57,7 @@ exports.voiceResponse = function voiceResponse(requestBody) {
 
     //CONF - Start a conference
     startConference(twiml, requestBody.From.split(":")[1], requestBody.To);
-    updateConfDB();
+    // updateConfDB();
 
   }
   return twiml.toString();
@@ -68,7 +69,9 @@ exports.confEventHandler = async function confEventHandler(event, destinationNum
   console.log("event for call SID: ", syncMapID);
   console.log("conference event: ", event);
   // console.log("destination number: ", destinationNum);
-
+  // db.set(event.ConferenceSid,"{room:XOXO,ID:CFXXXXX}");
+  // console.log("conf : ",db.get(event.ConferenceSid));
+  // console.log("file contents : ",db.JSON());
 
   //if 1st participant joined the conference, create sync map and add the other participant to the conference
   if (event.SequenceNumber == 1 && event.StatusCallbackEvent == "participant-join") {
@@ -102,23 +105,23 @@ exports.confEventHandler = async function confEventHandler(event, destinationNum
           }
         })
         .then(sync_map_item => console.log(sync_map_item.key));
-
-      // add another participant to conference
-      await client.conferences(event.ConferenceSid)
-        .participants
-        .create({
-          earlyMedia: true,
-          beep: 'onEnter',
-          endConferenceOnExit: "true",
-          statusCallback: 'https://3eb9-2607-9880-3297-ffd2-7820-eb28-381-80ed.ngrok.io/participantEvents',
-          statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
-          record: false,
-          from: config.callerId,
-          to: `client:${destinationNum}`,
-          muted: 'false',
-          label:`${destinationNum}`
-        })
-        .then(participant => console.log(participant.callSid));
+        console.log("***********event.participantLabel****", event.ParticipantLabel);
+      // // add another participant to conference
+      // await client.conferences(event.ConferenceSid)
+      //   .participants
+      //   .create({
+      //     earlyMedia: true,
+      //     beep: 'onEnter',
+      //     endConferenceOnExit: "true",
+      //     statusCallback: `${config.ngrokURL}/participantEvents`,
+      //     statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+      //     record: false,
+      //     from: "client:"+event.ParticipantLabel,
+      //     to: `client:${destinationNum}`,
+      //     muted: 'false',
+      //     label:`${destinationNum}`
+      //   })
+      //   .then(participant => console.log(participant.callSid));
     }
 
     catch (err) {
@@ -219,7 +222,6 @@ exports.participantEventsHandler = async function participantEventsHandler(event
   };
 };
 
-
 //Updates participant's hold status
 exports.holdParticipant = async function holdParticipant(reqCallSID) {
 
@@ -233,7 +235,7 @@ exports.holdParticipant = async function holdParticipant(reqCallSID) {
     //   .update({ hold: true })
     //   .then(participant => console.log(participant.callSid));
 
-    //Include identity and token in a JSON response
+    // Include identity and token in a JSON response
     return {
       'status': "hold_success"
     };
@@ -246,49 +248,60 @@ exports.holdParticipant = async function holdParticipant(reqCallSID) {
   }
 };
 
-
-/**
- * Checks if the given value is valid as phone number
- * @param {Number|String} number
- * @return {Boolean}
- */
-function isAValidPhoneNumber(number) {
-  return /^[\d\+\-\(\) ]+$/.test(number);
-}
-
 async function startConference(twiml, fromLabel, to) {
 
   try {
     console.log("Starting conference...");
 
     const dial = twiml.dial();
-
-    await dial.conference({
-      statusCallback: `https://3eb9-2607-9880-3297-ffd2-7820-eb28-381-80ed.ngrok.io/confEvents?to=${encodeURIComponent(to)}`,
+    const roomName=getRoomName();
+    
+  const confRes= await dial.conference({
+      statusCallback: `${config.ngrokURL}/confEvents?to=${encodeURIComponent(to)}`,
       statusCallbackEvent: 'start end join leave mute hold modify',
       startConferenceOnEnter: 'true',
       endConferenceOnExit: 'true',
       participantLabel: fromLabel
-    }, "Room007");
+    }, roomName);
 
-    console.log("Conference started ");
+    console.log("Conference started",confRes.conference);
+
+    // add another participant to conference
+    const participantRes = await client.conferences(roomName)
+    .participants
+    .create({
+      earlyMedia: true,
+      beep: 'onEnter',
+      endConferenceOnExit: "true",
+      statusCallback: `${config.ngrokURL}/participantEvents`,
+      statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
+      record: false,
+      from: "client:"+ fromLabel,
+      to: `client:${to}`,
+      muted: 'false',
+      label:`${to}`
+    });
+
+    console.log("Participant: ",participantRes);
 
   } catch (err) { console.log("Error starting conference: ", err); }
 
 }
 
-async function updateConfDB(twiml, fromLabel, to) {
+
+function getRoomName() {
+  const randString =Array.from(Array(34), () => Math.floor(Math.random() * 36).toString(36)).join('');
+
+  return "CR"+randString;
+}
+
+// async function updateConfDB(twiml, fromLabel, to) {
   
-  try {
-    console.log("Starting conference...");
+//   try {
+//     console.log("updateConfDB...");
 
-    client.serverless.v1.services(config.assetServiceSid)
-      .assets
-      .create({ friendlyName: 'confState' })
-      .then(asset => console.log(asset.sid));
+  
 
-    console.log("Conference started ", twiml.toString());
+//   } catch (err) { console.log("Error starting conference: ", err); }
 
-  } catch (err) { console.log("Error starting conference: ", err); }
-
-}
+// }

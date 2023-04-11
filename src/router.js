@@ -1,9 +1,11 @@
 const Router = require("express").Router;
 const { tokenGenerator, voiceResponse, confEventHandler, participantEventsHandler, holdParticipant } = require("./confOrchestrator");
+// const { conDB } = require("./dbSync.js");
 
 const router = new Router();
 
 router.get("/token", (req, res) => {
+  // conDB();
   res.send(tokenGenerator());
 });
 
