@@ -1,19 +1,17 @@
 const Router = require("express").Router;
-const { tokenGenerator, voiceResponse, confEventHandler, participantEventsHandler, holdParticipant } = require("./confOrchestrator");
-// const { conDB } = require("./dbSync.js");
+const { tokenGenerator, createConference, confEventHandler, participantEventsHandler, holdParticipant } = require("./confOrchestrator");
 
 const router = new Router();
 
 router.get("/token", (req, res) => {
-  // conDB();
   res.send(tokenGenerator());
 });
 
 //handles initial outbound call request
 router.post("/voice", (req, res) => {
   res.set("Content-Type", "text/xml");
-  console.log("/voice rcvd");
-  res.send(voiceResponse(req.body));
+  // console.log("/voice rcvd");
+  res.send(createConference(req.body));
 });
 
 //CONF - handles conference webhook

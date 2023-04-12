@@ -32,6 +32,10 @@ cfg.ngrokURL = process.env.NGROK_URL;
 cfg.dbHost = process.env.DB_HOST;
 cfg.dbUsername = process.env.DB_USERNAME;
 cfg.dbPwd = process.env.DB_PWD;
+cfg.dbName = process.env.DB_NAME;
+cfg.dbPort = process.env.DB_PORT;
+
+
 
 
 
