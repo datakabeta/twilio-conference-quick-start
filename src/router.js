@@ -17,13 +17,13 @@ router.post("/voice", (req, res) => {
 //CONF - handles conference webhook
 router.post("/confEvents", (req, res) => {
   // console.log("/events rcvd", req.body);
-  res.send(confEventHandler(req.body, req.query.to));
+  res.send(confEventHandler(req.body));
 });
 
 //CONF - handles participant webhook
 router.post("/participantEvents", (req, res) => {
   // console.log("/participantEvents received", req.body);
-  res.send(participantEventsHandler(req.body));
+  // res.send(participantEventsHandler(req.body));
 });
 
 //CONF - handles hold requests

@@ -41,7 +41,7 @@ exports.tokenGenerator = function tokenGenerator() {
 
 //Twiml app that creates conference
 exports.createConference = function createConference(requestBody) {
-  console.log("requestBody to voiceResponse: ", JSON.stringify(requestBody));
+  // console.log("requestBody to voiceResponse: ", JSON.stringify(requestBody));
   const toNumberOrClientName = requestBody.To;
   const callerId = config.callerId;
   let twiml = new VoiceResponse();
@@ -54,19 +54,19 @@ exports.createConference = function createConference(requestBody) {
     // This will connect the caller with your Twilio.Device/client 
     dial.client(identity);
 
-  } else if (requestBody.To) {
+  }
+
+  else if (requestBody.To) {
 
     //CONF - Start a conference
     startConference(twiml, requestBody.From.split(":")[1], requestBody.To);
-
-
   }
   return twiml.toString();
 };
 
 //Handles conference status callback events
-exports.confEventHandler = async function confEventHandler(event, destinationNum) {
-  const syncMapID = "_" + event.CallSid; //changed temporarily from event.ConferenceSid
+exports.confEventHandler = async function confEventHandler(event) {
+  const syncMapID = "_" + event.CallSid;
   console.log("event for call SID: ", syncMapID);
   console.log("conference event: ", event);
 
@@ -103,7 +103,7 @@ exports.confEventHandler = async function confEventHandler(event, destinationNum
     }
 
     catch (err) {
-      console.log("Adding participant/sync map creation failed", err);
+      console.log("Adding sync map creation failed", err);
     }
   }
 
@@ -111,7 +111,6 @@ exports.confEventHandler = async function confEventHandler(event, destinationNum
     try {
       //if event is for a call leg, update map corresponding to that call leg
       if (typeof event.CallSid !== 'undefined') {
-        //update sync map of call SID for current conference event
         await client.sync.v1.services(config.syncServiceSid)
           .syncMaps(syncMapID)
           .syncMapItems(event.CallSid)
@@ -147,7 +146,7 @@ exports.confEventHandler = async function confEventHandler(event, destinationNum
 //Handles participant status callback events
 exports.participantEventsHandler = async function participantEventsHandler(event) {
 
-  console.log("participant event rcvd by function: ", event);
+  // console.log("participant event rcvd by function: ", event);
 
   //Include identity and token in a JSON response
   return {
@@ -190,6 +189,7 @@ async function startConference(twiml, fromLabel, to) {
     const dial = twiml.dial();
     const roomName = generateRoomName();
 
+    //create conference with 1st participant
     const confRes = await dial.conference({
       statusCallback: `${config.ngrokURL}/confEvents?to=${encodeURIComponent(to)}`,
       statusCallbackEvent: 'start end join leave mute hold modify',
@@ -201,7 +201,7 @@ async function startConference(twiml, fromLabel, to) {
     console.log("Conference started!");
 
     // add another participant to conference
-    const participantRes = await client.conferences(roomName)
+    const participant2 = await client.conferences(roomName)
       .participants
       .create({
         earlyMedia: true,
@@ -216,22 +216,48 @@ async function startConference(twiml, fromLabel, to) {
         label: `${to}`
       });
 
-    console.log("Participant 2: ", participantRes);
+    console.log("Participant 2: ", participant2);
 
-    // const newCall = new Call('1234', 'Alice', '555-1234', '5678', 'Y');
-    //   2
-    // newCall.save((err) => {
-    //   if (err) {
-    //     console.error(`Error saving call: ${err}`);
-    //   } else {
-    //     console.log(`Call saved successfully`);
-    //   }
-    // });
+    //Add conference to database
+    const newConference = new Conference(participant2.conferenceSid, roomName);
 
+    newConference.save((err) => {
+      if (err) {
+        console.error(`Error saving conference ${participant2.conferenceSid}: ${err}`);
+      } else {
+        console.log(`Conference ${participant2.conferenceSid} saved successfully`);
+      }
+    });
 
-    //Save conference state to DB
-    // updateConfDB({},{},);
-  } catch (err) { console.log("Error starting conference: ", err); }
+    //Add 2nd participant to database
+    const call2 = new Call(participant2.callSid, participant2.label, participant2.conferenceSid);
+
+    call2.save((err) => {
+      if (err) {
+        console.error(`Error saving call ${participant2.callSid}: ${err}`);
+      } else {
+        console.log(`Call ${participant2.callSid} saved successfully`);
+      }
+    });
+
+    ////Retrieve callSid and add 1st participant to database
+    const participant1 = await client.conferences(participant2.conferenceSid)
+      .participants(fromLabel)
+      .fetch();
+
+    console.log("participant1: ", participant1);
+
+    const call1 = new Call(participant1.callSid, participant1.label, participant1.conferenceSid);
+
+    call1.save((err) => {
+      if (err) {
+        console.error(`Error saving call ${participant1.callSid}: ${err}`);
+      } else {
+        console.log(`Call ${participant1.callSid} saved successfully`);
+      }
+    });
+
+  } catch (err) { console.log("Error establishing conference: ", err); }
 
 }
 

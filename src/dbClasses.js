@@ -29,12 +29,14 @@ class Conference {
     constructor(conferenceId, roomName=null) {
         this.conferenceId = conferenceId;
         this.roomName = roomName;
+
+        // console.log("Conference object received: ",this);
     }
 
     save(callback) {
         const query = {
-            text: 'INSERT INTO conferences(conferenceId, roomName) VALUES($1, $2)',
-            values: [this.conferenceId, this.name],
+            text: 'INSERT INTO conferences(conferencesid, roomName) VALUES($1, $2)',
+            values: [this.conferenceId, this.roomName],
         };
 
         pool.query(query, (err, res) => {
@@ -52,6 +54,8 @@ class Call {
         this.callSid = callSid;
         this.participantLabel = participantLabel;
         this.conferenceSid = conferenceSid;
+
+        // console.log("call object created: ",this);
     }
 
     save(callback) {
@@ -59,6 +63,7 @@ class Call {
             text: 'INSERT INTO calls(callSid, participantLabel, conferenceSid) VALUES($1, $2, $3)',
             values: [this.callSid, this.participantLabel, this.conferenceSid],
         };
+
 
         pool.query(query, (err, res) => {
             if (err) {
