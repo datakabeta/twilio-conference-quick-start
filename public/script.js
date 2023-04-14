@@ -47,18 +47,18 @@
 
   // SETUP STEP 2: Request an Access Token
   async function startupClient() {
-    log("Requesting Access Token...");
+    console.log("Requesting Access Token...");
 
     try {
       const data = await $.getJSON("/token");
-      log("Got a token.");
+      console.log("Got a token.");
       token = data.token;
       setClientNameUI(data.identity);
       intitializeDevice();
 
     } catch (err) {
       console.log(err);
-      log("An error occurred. See your browser console for more information.");
+      console.log("An error occurred. See your browser console for more information.");
     }
   }
 
@@ -66,7 +66,7 @@
   // Instantiate a new Twilio.Device
   function intitializeDevice() {
     logDiv.classList.remove("hide");
-    log("Initializing device");
+    console.log("Initializing device");
     device = new Twilio.Device(token, {
       logLevel: 1,
       // Set Opus as our preferred codec. Opus generally performs better, requiring less bandwidth and
@@ -85,12 +85,12 @@
   // Listen for Twilio.Device states
   function addDeviceListeners(device) {
     device.on("registered", function () {
-      log("Twilio.Device Ready to make and receive calls!");
+      console.log("Twilio.Device Ready to make and receive calls!");
       callControlsDiv.classList.remove("hide");
     });
 
     device.on("error", function (error) {
-      log("Twilio.Device Error: " + error.message);
+      console.log("Twilio.Device Error: " + error.message);
     });
 
     device.on("incoming", handleIncomingCall);
@@ -112,43 +112,58 @@
     };
 
     if (device) {
-      log(`Attempting to call ${params.To} ...`);
+      console.log(`Attempting to call ${params.To} ...`);
 
       // Twilio.Device.connect() returns a Call object
       const call = await device.connect({ params });
 
-      console.log("## call object rcvd", call);
-
-
-
+      console.log("## outgoing call object", call);
+      holdButton.classList.remove("hide"); //unhide hold button
       // add listeners to the Call
       // "accepted" means the call has finished connecting and the state is now "open"
       call.on("accept", updateUIAcceptedOutgoingCall);
       call.on("disconnect", updateUIDisconnectedOutgoingCall);
       call.on("cancel", updateUIDisconnectedOutgoingCall);
-
+      
       outgoingCallHangupButton.onclick = () => {
-        log("Hanging up ...");
+        console.log("Hanging up ...");
         call.disconnect();
       };
 
       holdButton.onclick = () => {
-        log("Hanging up ...");
-        holdCall(call.parameters.CallSid);
+        console.log("## Hold button clicked ...");
+  
+        const payload = {
+          target: params.To,
+          callSid: call.parameters.CallSid
+        };
+        holdCall(payload);
       };
 
     } else {
-      log("Unable to make call.");
+      console.log("Unable to make call.");
     }
   }
 
 
   //place call on hold
-  async function holdCall(myCallSID) {
-    console.log("## from call SID ", myCallSID);
+  async function holdCall(payload) {
+    console.log("## hold request payload", payload);
 
-    const holdResp = await $.post("/hold", {'requesterCallSID': myCallSID});
-    console.log("## Hold response", holdResp);
+    $.ajax({
+      type: 'POST',
+      url: '/hold',
+      data: payload,
+      success: function(data) {
+        console.log('## Hold Response:', data);
+      },
+      error: function(error) {
+        console.error('## Hold Error:', error);
+      }
+    });
+    
+    // const holdResp = await $.post("/hold", payload);
+    // console.log("## Hold response", holdResp);
 
     //Add call to update participant API call to place call on hold
 
@@ -184,8 +199,8 @@
         //if placed on hold 
         if (data.Hold == "true") {
           console.log('## Call is on hold');
-          $("#hold").append("<p>Your call has been placed on hold</p>");
-          $('#hold p').css('color', 'red');
+          $("div#hold").append("<p>Your call has been placed on hold</p>");
+          $('div#hold p').css('color', 'red');
         }
       });
 
@@ -196,9 +211,8 @@
   function updateUIAcceptedOutgoingCall(call) {
     //get conf sync map status
     const syncStateOutgoingCall = getSyncStatus(token, call.parameters.CallSid);
-    // console.log("## syncState",syncState);
 
-    log("## Call in progress ...");
+    console.log("## Call in progress ...");
     callButton.disabled = true;
     outgoingCallHangupButton.classList.remove("hide");
     volumeIndicators.classList.remove("hide");
@@ -206,16 +220,17 @@
   }
 
   function updateUIDisconnectedOutgoingCall() {
-    log("Call disconnected.");
+    console.log("Call disconnected.");
     callButton.disabled = false;
     outgoingCallHangupButton.classList.add("hide");
     volumeIndicators.classList.add("hide");
+    holdButton.classList.add("hide"); //hide hold button
   }
 
   // HANDLE INCOMING CALL
 
   function handleIncomingCall(call) {
-    log(`Incoming call from ${call.parameters.From}`);
+    console.log(`Incoming call from ${call.parameters.From}`);
 
     //show incoming call div and incoming phone number
     incomingCallDiv.classList.remove("hide");
@@ -245,23 +260,34 @@
   function acceptIncomingCall(call) {
     call.accept();
 
-    console.log("Incoming call object: ", call);
+    console.log("## Incoming call object: ", call);
 
     //get sync map status
     const syncStateIncomingCall = getSyncStatus(token, call.parameters.CallSid);
 
     //update UI
-    log("Accepted incoming call.");
+    console.log("Accepted incoming call.");
+    holdButton.classList.remove("hide"); //unhide hold button
     incomingCallAcceptButton.classList.add("hide");
     incomingCallRejectButton.classList.add("hide");
     incomingCallHangupButton.classList.remove("hide");
+
+    holdButton.onclick = () => {
+      console.log("## Hold button clicked ...");
+
+      const payload = {
+        target: call.parameters.From.split(":")[1],
+        callSid: call.parameters.CallSid
+      };
+      holdCall(payload);
+    };
   }
 
   // REJECT INCOMING CALL
 
   function rejectIncomingCall(call) {
     call.reject();
-    log("Rejected incoming call");
+    console.log("Rejected incoming call");
     resetIncomingCallUI();
   }
 
@@ -269,24 +295,25 @@
 
   function hangupIncomingCall(call) {
     call.disconnect();
-    log("Hanging up incoming call");
+    console.log("Hanging up incoming call");
     resetIncomingCallUI();
   }
 
   // HANDLE CANCELLED INCOMING CALL
 
   function handleDisconnectedIncomingCall() {
-    log("Incoming call ended.");
+    console.log("Incoming call ended.");
     resetIncomingCallUI();
   }
 
   // MISC USER INTERFACE
 
   // Activity log
-  function log(message) {
-    logDiv.innerHTML += `<p class="log-entry">&gt;&nbsp; ${message} </p>`;
-    logDiv.scrollTop = logDiv.scrollHeight;
-  }
+  // function log(message) {
+  //   logDiv.innerHTML += `<p class="log-entry">&gt;&nbsp; ${message} </p>`;
+  //   logDiv.scrollTop = logDiv.scrollHeight;
+  //   console.log(message);
+  // }
 
   function setClientNameUI(clientName) {
     var div = document.getElementById("client-name");
@@ -299,6 +326,7 @@
     incomingCallRejectButton.classList.remove("hide");
     incomingCallHangupButton.classList.add("hide");
     incomingCallDiv.classList.add("hide");
+    holdButton.classList.add("hide"); //hide hold button
   }
 
   // AUDIO CONTROLS

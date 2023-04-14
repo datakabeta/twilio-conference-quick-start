@@ -28,8 +28,8 @@ router.post("/participantEvents", (req, res) => {
 
 //CONF - handles hold requests
 router.post("/hold", (req, res) => {
-  console.log("/hold received from", req.body.requesterCallSID);
-  res.send(holdParticipant(req.body.requesterCallSID));
+  // console.log("/hold received from", req.body);
+  res.send(holdParticipant(req.body));
 });
 
 module.exports = router;
