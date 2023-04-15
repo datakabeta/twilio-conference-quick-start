@@ -1,4 +1,4 @@
-const pool = require('./dbSync');
+const pool = require('./confDBConnect');
 
 class User {
     constructor(userId, participantLabel = null, phoneNumber = null, callSid = null, isInCall = 'N') {

@@ -143,10 +143,10 @@ exports.confEventHandler = async function confEventHandler(event) {
       console.error(`error updating sync map for ${syncMapID}: ${err}`);
     }
 
-    //update database
-    if(event.StatusCallbackEvent == "participant-leave") {
+    //update call status in database
+    if (event.StatusCallbackEvent == "participant-leave") {
 
-      await inactiveCallStatusUpdate(event.CallSid);
+      await updateCallStatus(event.CallSid, 'N');
 
     }
   }
@@ -177,7 +177,7 @@ exports.holdParticipant = async function holdParticipant(event) {
 
   console.log("hold request rcvd: ", event);
 
-  const targetCall = await findCall(event.target); //Read Twilio Asset to get Conf SID and other participant's SID.
+  const targetCall = await findCallInDB(event.target); //Read Twilio Asset to get Conf SID and other participant's SID.
   console.log(`Received call details for ${event.target}: ${targetCall}`);
 
   try {
@@ -199,12 +199,11 @@ exports.holdParticipant = async function holdParticipant(event) {
   }
 };
 
-//creates conference and adds participants
-async function startConference(twiml, fromLabel, to) {
 
+//establishes conference
+async function startConference(twiml, fromLabel, to) {
   const roomName = generateRoomName();
   let participant2;
-
 
   try {
     console.log("Starting conference...");
@@ -239,53 +238,45 @@ async function startConference(twiml, fromLabel, to) {
       });
 
     console.log("Participant 2: ", participant2);
-
+  } catch (err) {
+    console.error("Error establishing conference: ", err);
   }
-
-  catch (err) { console.error("Error establishing conference: ", err); }
+  //Add 2nd participant to database
+  await addConferenceToDatabase(participant2.conferenceSid, roomName);
 
   //Add conference to database
-  const newConference = new Conference(participant2.conferenceSid, roomName);
-
-  try {
-    await newConference.save();
-    console.log(`Conference ${participant2.conferenceSid} saved successfully`);
-  }
-
-  catch (err) {
-    console.error(`Error saving conference ${participant2.conferenceSid}: ${err}`);
-  }
-
-  //Add 2nd participant to database
-  const call2 = new Call(participant2.callSid, participant2.label, participant2.conferenceSid, 'Y');
-  try {
-    await call2.save();
-    console.log(`Call ${participant2.callSid} saved successfully`);
-  }
-
-  catch (err) {
-    console.error(`Error saving call ${participant2.callSid}: ${err}`);
-  }
-
-
-  ////Retrieve callSid and add 1st participant to database
+  await addParticipantToDatabase(participant2.callSid, participant2.label, participant2.conferenceSid, 'Y');
+  //Retrieve callSid and add 1st participant to database
   const participant1 = await client.conferences(participant2.conferenceSid)
     .participants(fromLabel)
     .fetch();
 
   console.log("participant1: ", participant1);
 
-  const call1 = new Call(participant1.callSid, participant1.label, participant1.conferenceSid,'Y');
+  //Add 1st participant to database
+  await addParticipantToDatabase(participant1.callSid, participant1.label, participant1.conferenceSid, 'Y');
+}
+
+async function addConferenceToDatabase(conferenceSid, roomName) {
+  const newConference = new Conference(conferenceSid, roomName);
 
   try {
-    await call1.save();
-    console.log(`Call ${participant1.callSid} saved successfully`);
+    await newConference.save();
+    console.log(`Conference ${conferenceSid} saved successfully`);
+  } catch (err) {
+    console.error(`Error saving conference ${conferenceSid}: ${err}`);
   }
+}
 
-  catch (err) {
-    console.error(`Error saving call ${participant1.callSid}: ${err}`);
+async function addParticipantToDatabase(callSid, participantLabel, conferenceSid, isActive) {
+  const call = new Call(callSid, participantLabel, conferenceSid, isActive);
+
+  try {
+    await call.save();
+    console.log(`Call ${callSid} saved successfully`);
+  } catch (err) {
+    console.error(`Error saving call ${callSid}: ${err}`);
   }
-
 }
 
 function generateRoomName() {
@@ -295,7 +286,7 @@ function generateRoomName() {
 }
 
 //find a call based on participant label
-async function findCall(participantLabel) {
+async function findCallInDB(participantLabel) {
 
   try {
     const result = await Call.findByParticipantLabel(participantLabel);
@@ -310,10 +301,10 @@ async function findCall(participantLabel) {
 }
 
 //update call status to inactive in DB 
-async function inactiveCallStatusUpdate(callSid) {
+async function updateCallStatus(callSid, status) {
 
   try {
-    const result = await Call.updateCallStatus(callSid,'N');
+    const result = await Call.updateCallStatus(callSid, status);
     console.log(`Call status updated ${result}`);
     return (result);
   }

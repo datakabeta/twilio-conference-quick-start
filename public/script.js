@@ -124,7 +124,7 @@
       call.on("accept", updateUIAcceptedOutgoingCall);
       call.on("disconnect", updateUIDisconnectedOutgoingCall);
       call.on("cancel", updateUIDisconnectedOutgoingCall);
-      
+
       outgoingCallHangupButton.onclick = () => {
         console.log("Hanging up ...");
         call.disconnect();
@@ -132,7 +132,7 @@
 
       holdButton.onclick = () => {
         console.log("## Hold button clicked ...");
-  
+
         const payload = {
           target: params.To,
           callSid: call.parameters.CallSid
@@ -154,14 +154,14 @@
       type: 'POST',
       url: '/hold',
       data: payload,
-      success: function(data) {
+      success: function (data) {
         console.log('## Hold Response:', data);
       },
-      error: function(error) {
+      error: function (error) {
         console.error('## Hold Error:', error);
       }
     });
-    
+
     // const holdResp = await $.post("/hold", payload);
     // console.log("## Hold response", holdResp);
 
@@ -187,6 +187,9 @@
         const data = item.item.descriptor.data;
         console.dir(JSON.stringify(data), { 'maxArrayLength': null });
         console.log('## key', item.item.descriptor.key);
+
+        //store call status in local storage
+        storeObjectInLocalStorage("callStatus", JSON.stringify(data));
       });
 
       //On map item updates
@@ -195,13 +198,32 @@
         const data = item.item.descriptor.data;
         console.dir(JSON.stringify(data), { 'maxArrayLength': null });
         console.log('## key', item.item.descriptor.key);
+        
+        //get last set values in local storage for comparison
+        const localCallStatus = getObjectFromLocalStorage("callStatus");
+        console.log("calCallStatus before update: ",localCallStatus);
 
-        //if placed on hold 
-        if (data.Hold == "true") {
+        console.log("data.Hold" ,data.Hold);
+
+        console.log("localCallStatus.Hold",localCallStatus.Hold);
+        
+        //if calls is placed on hold
+        if (data.Hold == "true" && localCallStatus.Hold=='false') {
           console.log('## Call is on hold');
           $("div#hold").append("<p>Your call has been placed on hold</p>");
           $('div#hold p').css('color', 'red');
+          holdButton.classList.add("hide"); //hide hold button for this user
         }
+
+        //if call hold is removed
+        else if (data.Hold == "false" && localCallStatus.Hold=='true') {
+          console.log('## Hold removed');
+          $("div#hold").empty();
+          holdButton.classList.remove("hide"); //hide hold button for this user
+        }
+
+        //store current call status in local storage
+        storeObjectInLocalStorage("callStatus", JSON.stringify(data));
       });
 
     });
@@ -225,6 +247,7 @@
     outgoingCallHangupButton.classList.add("hide");
     volumeIndicators.classList.add("hide");
     holdButton.classList.add("hide"); //hide hold button
+    $("div#hold").empty();
   }
 
   // HANDLE INCOMING CALL
@@ -327,6 +350,7 @@
     incomingCallHangupButton.classList.add("hide");
     incomingCallDiv.classList.add("hide");
     holdButton.classList.add("hide"); //hide hold button
+    $("div#hold").empty();
   }
 
   // AUDIO CONTROLS
@@ -404,5 +428,17 @@
       selectEl.appendChild(option);
     });
   }
+
+
+  function storeObjectInLocalStorage(key, object) {
+    localStorage.setItem(key, object);
+  }
+
+  function getObjectFromLocalStorage(key) {
+    const objectString = localStorage.getItem(key);
+    return JSON.parse(objectString);
+  }
+
+
 
 });
