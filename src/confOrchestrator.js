@@ -172,10 +172,10 @@ exports.participantEventsHandler = async function participantEventsHandler(event
   };
 };
 
-//Updates participant's hold status
-exports.holdParticipant = async function holdParticipant(event) {
+//Sets user's hold or mute status 
+exports.setUserState = async function setUserState(event) {
 
-  console.log("hold request rcvd: ", event);
+  console.log("user state change req rcvd: ", event);
 
   const targetCall = await findCallInDB(event.target); //Read Twilio Asset to get Conf SID and other participant's SID.
   console.log(`Received call details for ${event.target}: ${targetCall}`);
@@ -183,18 +183,18 @@ exports.holdParticipant = async function holdParticipant(event) {
   try {
     await client.conferences(targetCall.conferencesid)
       .participants(targetCall.callsid)
-      .update({ hold: true });
+      .update({ [event.userStateType]: event.userStateValue });
 
     console.log(`${event.target} has been placed on hold`);
 
     return {
-      'status': "hold_success"
+      'status': "success"
     };
   }
   catch (err) {
     console.error(`Hold request for ${event.target} has failed.`);
     return {
-      'status': "hold_failed"
+      'status': "failed"
     };
   }
 };

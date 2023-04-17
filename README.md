@@ -4,7 +4,7 @@
 
 # Twilio Conference Quickstart with Node.js
 
-This application should give you a  starting point for writing your own Twilio conferencing app. This app uses the following:
+This application should give you a  starting point for writing your own Twilio conferencing app. It uses the following:
 
 - [Twilio Voice Javascript SDK](https://www.twilio.com/docs/voice/sdks/javascript)
 - [Twilio Sync Javascript SDK](https://sdk.twilio.com/js/sync/releases/3.0.1/docs/index.html) - a state synchronization service

@@ -127,3 +127,8 @@ div#volume-indicators > div {
 button:disabled {
   cursor: not-allowed;
 }
+
+.warning {
+  color: red;
+}
+

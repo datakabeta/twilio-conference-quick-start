@@ -8,6 +8,7 @@
   const holdDiv = document.getElementById("hold");
   const outgoingCallHangupButton = document.getElementById("button-hangup-outgoing");
   const holdButton = document.getElementById("button-hold-call");
+  const unholdButton = document.getElementById("button-unhold-call");
   const callControlsDiv = document.getElementById("call-controls");
   const audioSelectionDiv = document.getElementById("output-selection");
   const getAudioDevicesButton = document.getElementById("get-devices");
@@ -131,13 +132,7 @@
       };
 
       holdButton.onclick = () => {
-        console.log("## Hold button clicked ...");
-
-        const payload = {
-          target: params.To,
-          callSid: call.parameters.CallSid
-        };
-        holdCall(payload);
+        onClickHoldButton(call.parameters.CallSid, params.To);
       };
 
     } else {
@@ -146,19 +141,19 @@
   }
 
 
-  //place call on hold
-  async function holdCall(payload) {
-    console.log("## hold request payload", payload);
+  //place user on hold or mute
+  async function changeUserState(payload) {
+    console.log("## User state change request payload", payload);
 
     $.ajax({
       type: 'POST',
-      url: '/hold',
+      url: '/userstateupdate',
       data: payload,
       success: function (data) {
-        console.log('## Hold Response:', data);
+        console.log('## User state change Response:', data.status);
       },
       error: function (error) {
-        console.error('## Hold Error:', error);
+        console.error('## User state change Error:', error);
       }
     });
 
@@ -175,7 +170,6 @@
 
     //initialize sync client
     const syncClient = new Twilio.Sync.Client(token);
-    // console.log("## syncClient: ", syncClient);
 
     ///Subscribe to conference state updates
 
@@ -194,35 +188,38 @@
 
       //On map item updates
       map.on('itemUpdated', function (item) {
-        console.log('## item updated');
+        console.log(`## item updated for ${item.item.descriptor.key}`);
         const data = item.item.descriptor.data;
         console.dir(JSON.stringify(data), { 'maxArrayLength': null });
-        console.log('## key', item.item.descriptor.key);
-        
+
+        //if user has left the call
+        if(data.StatusCallbackEvent=="participant-leave") {
+          console.log("## participant left");
+          deleteObjectInLocalStorage("callstatus"); //clear local call status
+          return;
+        }
+
         //get last set values in local storage for comparison
         const localCallStatus = getObjectFromLocalStorage("callStatus");
-        console.log("calCallStatus before update: ",localCallStatus);
-
-        console.log("data.Hold" ,data.Hold);
-
-        console.log("localCallStatus.Hold",localCallStatus.Hold);
+        console.log("## Local storage state: ", localCallStatus);
+        console.log("## Hold state in local storage", localCallStatus.Hold);
+        console.log("## Hold state in sync", data.Hold);
         
-        //if calls is placed on hold
-        if (data.Hold == "true" && localCallStatus.Hold=='false') {
+        //if call is placed on hold
+        if (data.Hold == "true" && localCallStatus.Hold == 'false') {
           console.log('## Call is on hold');
-          $("div#hold").append("<p>Your call has been placed on hold</p>");
-          $('div#hold p').css('color', 'red');
+          $(holdDiv).append("<p class='warning'>Your call has been placed on hold</p>");
           holdButton.classList.add("hide"); //hide hold button for this user
         }
 
         //if call hold is removed
-        else if (data.Hold == "false" && localCallStatus.Hold=='true') {
+        else if (data.Hold == "false" && localCallStatus.Hold == 'true') {
           console.log('## Hold removed');
-          $("div#hold").empty();
+          $(holdDiv).find("p").filter(":first").remove();
           holdButton.classList.remove("hide"); //hide hold button for this user
         }
 
-        //store current call status in local storage
+        //override call status in local storage
         storeObjectInLocalStorage("callStatus", JSON.stringify(data));
       });
 
@@ -238,6 +235,7 @@
     callButton.disabled = true;
     outgoingCallHangupButton.classList.remove("hide");
     volumeIndicators.classList.remove("hide");
+    holdButton.classList.remove("hide"); //unhide hold button
     bindVolumeIndicators(call);
   }
 
@@ -247,7 +245,8 @@
     outgoingCallHangupButton.classList.add("hide");
     volumeIndicators.classList.add("hide");
     holdButton.classList.add("hide"); //hide hold button
-    $("div#hold").empty();
+    $(holdDiv).find("p").filter(":first").remove();
+    
   }
 
   // HANDLE INCOMING CALL
@@ -296,15 +295,46 @@
     incomingCallHangupButton.classList.remove("hide");
 
     holdButton.onclick = () => {
-      console.log("## Hold button clicked ...");
-
-      const payload = {
-        target: call.parameters.From.split(":")[1],
-        callSid: call.parameters.CallSid
-      };
-      holdCall(payload);
+      onClickHoldButton(call.parameters.CallSid, call.parameters.From.split(":")[1]);
     };
   }
+
+  //Place call on hold
+  async function onClickHoldButton(callSid, targetNumber) {
+    console.log("## Hold button clicked ...");
+
+    const payload = {
+      target: targetNumber,
+      callSid: callSid,
+      userStateType: "hold",
+      userStateValue: "true"
+    };
+    await changeUserState(payload);
+    holdButton.classList.add("hide"); //hide hold button
+    unholdButton.classList.remove("hide"); //show unhold button
+
+    unholdButton.onclick = () => {
+      onClickUnHoldButton(callSid, targetNumber);
+    };
+    
+  }
+
+  //Place call on hold
+  async function onClickUnHoldButton(callSid, targetNumber) {
+    console.log("## UnHold button clicked ...");
+
+    const payload = {
+      target: targetNumber,
+      callSid: callSid,
+      userStateType: "hold",
+      userStateValue: "false"
+    };
+    await changeUserState(payload);
+    holdButton.classList.remove("hide"); //show hold button
+    unholdButton.classList.add("hide"); //hide unhold button    
+    
+  }
+
 
   // REJECT INCOMING CALL
 
@@ -350,7 +380,8 @@
     incomingCallHangupButton.classList.add("hide");
     incomingCallDiv.classList.add("hide");
     holdButton.classList.add("hide"); //hide hold button
-    $("div#hold").empty();
+    $(holdDiv).find("p").filter(":first").remove();
+   
   }
 
   // AUDIO CONTROLS
@@ -438,6 +469,13 @@
     const objectString = localStorage.getItem(key);
     return JSON.parse(objectString);
   }
+
+  function deleteObjectInLocalStorage(key) {
+    localStorage.removeItem(key);
+    console.log(`## ${key} removed from local storage`);
+  }
+
+
 
 
 
