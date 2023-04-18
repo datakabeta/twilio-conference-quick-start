@@ -212,7 +212,7 @@ async function startConference(twiml, fromLabel, to) {
 
     //create conference with 1st participant
     const confRes = await dial.conference({
-      statusCallback: `${config.ngrokURL}/confEvents?to=${encodeURIComponent(to)}`,
+      statusCallback: `${config.ngrokURL}/confEvents`,
       statusCallbackEvent: 'start end join leave mute hold modify',
       startConferenceOnEnter: 'true',
       endConferenceOnExit: 'true',
