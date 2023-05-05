@@ -9,6 +9,7 @@
   const outgoingCallHangupButton = document.getElementById("button-hangup-outgoing");
   const holdButton = document.getElementById("button-hold-call");
   const unholdButton = document.getElementById("button-unhold-call");
+  const mergeButton = document.getElementById("button-merge-incoming");
   const callControlsDiv = document.getElementById("call-controls");
   const audioSelectionDiv = document.getElementById("output-selection");
   const getAudioDevicesButton = document.getElementById("get-devices");
@@ -66,6 +67,10 @@
   // SETUP STEP 3:
   // Instantiate a new Twilio.Device
   function intitializeDevice() {
+
+    //Clear local call data
+    localStorage.clear();
+
     logDiv.classList.remove("hide");
     console.log("Initializing device");
     device = new Twilio.Device(token, {
@@ -73,6 +78,8 @@
       // Set Opus as our preferred codec. Opus generally performs better, requiring less bandwidth and
       // providing better audio quality in restrained network conditions.
       codecPreferences: ["opus", "pcmu"],
+      //Allows for call waiting request
+      allowIncomingWhileBusy: "true"
     });
 
 
@@ -129,6 +136,7 @@
       outgoingCallHangupButton.onclick = () => {
         console.log("Hanging up ...");
         call.disconnect();
+
       };
 
       holdButton.onclick = () => {
@@ -157,11 +165,23 @@
       }
     });
 
-    // const holdResp = await $.post("/hold", payload);
-    // console.log("## Hold response", holdResp);
+  }
 
-    //Add call to update participant API call to place call on hold
+  //merge users
+  async function mergeCalls(payload) {
+    console.log("## Merge calls request payload", payload);
 
+    $.ajax({
+      type: 'POST',
+      url: '/mergecalls',
+      data: payload,
+      success: function (data) {
+        console.log('## Merge calls Response:', data.status);
+      },
+      error: function (error) {
+        console.error('## Merge calls Error:', error);
+      }
+    });
   }
 
   //get Sync map state
@@ -193,9 +213,10 @@
         console.dir(JSON.stringify(data), { 'maxArrayLength': null });
 
         //if user has left the call
-        if(data.StatusCallbackEvent=="participant-leave") {
+        if (data.StatusCallbackEvent == "participant-leave") {
           console.log("## participant left");
           deleteObjectInLocalStorage("callstatus"); //clear local call status
+
           return;
         }
 
@@ -204,7 +225,7 @@
         console.log("## Local storage state: ", localCallStatus);
         console.log("## Hold state in local storage", localCallStatus.Hold);
         console.log("## Hold state in sync", data.Hold);
-        
+
         //if call is placed on hold
         if (data.Hold == "true" && localCallStatus.Hold == 'false') {
           console.log('## Call is on hold');
@@ -228,6 +249,13 @@
   }
 
   function updateUIAcceptedOutgoingCall(call) {
+
+    console.log("## outoing call event", call);
+    console.log("## outoing to friendly name", call.customParameters.get('To'));
+    //add call to local storage
+    currentCallData = [{ callsid: call.parameters.CallSid, friendlyName: call.customParameters.get('To') }];
+    storeObjectInLocalStorage("currentCalls", JSON.stringify(currentCallData));
+
     //get conf sync map status
     const syncStateOutgoingCall = getSyncStatus(token, call.parameters.CallSid);
 
@@ -240,13 +268,13 @@
   }
 
   function updateUIDisconnectedOutgoingCall() {
-    console.log("Call disconnected.");
+    console.log("## Call disconnected.");
     callButton.disabled = false;
     outgoingCallHangupButton.classList.add("hide");
     volumeIndicators.classList.add("hide");
     holdButton.classList.add("hide"); //hide hold button
     $(holdDiv).find("p").filter(":first").remove();
-    
+
   }
 
   // HANDLE INCOMING CALL
@@ -280,9 +308,28 @@
   // ACCEPT INCOMING CALL
 
   function acceptIncomingCall(call) {
+
+    const currentCalls = getObjectFromLocalStorage("currentCalls");
+    console.log("## Current calls before accepting: ", currentCalls);
+
+    //place existing call on hold before accepting call in waiting
+    if (currentCalls != null) {
+      onClickHoldButton(currentCalls[0].callsid, currentCalls[0].friendlyName);
+      mergeButton.classList.remove("hide"); //show merge button
+
+      mergeButton.onclick = () => {
+        onClickMergeButton(call.parameters.CallSid, currentCalls[0].friendlyName);
+      };
+    }
+
     call.accept();
 
+
     console.log("## Incoming call object: ", call);
+
+    //add call to local storage
+    currentCallData = [{ callsid: call.parameters.CallSid, friendlyName: call.parameters.From.split(":")[1] }];
+    storeObjectInLocalStorage("currentCalls", JSON.stringify(currentCallData));
 
     //get sync map status
     const syncStateIncomingCall = getSyncStatus(token, call.parameters.CallSid);
@@ -316,7 +363,7 @@
     unholdButton.onclick = () => {
       onClickUnHoldButton(callSid, targetNumber);
     };
-    
+
   }
 
   //Place call on hold
@@ -332,15 +379,28 @@
     await changeUserState(payload);
     holdButton.classList.remove("hide"); //show hold button
     unholdButton.classList.add("hide"); //hide unhold button    
-    
+
   }
 
+  //Merge calls
+  async function onClickMergeButton(callSid, targetNumber) {
+    console.log("## Merge button clicked ...");
 
+    const payload = {
+      targetFriendlyName: targetNumber,
+      hostCallSid: callSid
+    };
+
+    await mergeCalls(payload);
+
+    mergeButton.classList.add("hide"); //hide merge button
+
+  }
   // REJECT INCOMING CALL
 
   function rejectIncomingCall(call) {
     call.reject();
-    console.log("Rejected incoming call");
+    console.log("## Rejected incoming call");
     resetIncomingCallUI();
   }
 
@@ -348,14 +408,14 @@
 
   function hangupIncomingCall(call) {
     call.disconnect();
-    console.log("Hanging up incoming call");
+    console.log("## Hanging up incoming call");
     resetIncomingCallUI();
   }
 
   // HANDLE CANCELLED INCOMING CALL
 
   function handleDisconnectedIncomingCall() {
-    console.log("Incoming call ended.");
+    console.log("## Incoming call handler.");
     resetIncomingCallUI();
   }
 
@@ -381,7 +441,7 @@
     incomingCallDiv.classList.add("hide");
     holdButton.classList.add("hide"); //hide hold button
     $(holdDiv).find("p").filter(":first").remove();
-   
+
   }
 
   // AUDIO CONTROLS
@@ -473,6 +533,20 @@
   function deleteObjectInLocalStorage(key) {
     localStorage.removeItem(key);
     console.log(`## ${key} removed from local storage`);
+  }
+
+  function removeCallFromLocalStorage(callSidToRemove) {
+    //Get current call SIDs from call status
+    const currentCalls = getObjectFromLocalStorage('currentCalls') || [];
+
+    // Find the index of the call SID to remove
+    const index = currentCalls.indexOf(callSidToRemove);
+
+    // If the call SID was found, remove it from the array
+    if (index !== -1) {
+      currentCalls.splice(index, 1);
+      storeObjectInLocalStorage("currentCalls", JSON.stringify(currentCalls))
+    }
   }
 
 

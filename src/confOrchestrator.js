@@ -32,10 +32,14 @@ exports.tokenGenerator = function tokenGenerator() {
   accessToken.addGrant(voiceGrant);
   accessToken.addGrant(syncGrant);
 
+
+  // console.log(`## Access token generated for ${identity}: ${accessToken}`);
+  // console.log("ToJWT token: ", accessToken.toJwt());
+
   // Include identity and token in a JSON response
   return {
     identity: identity,
-    token: accessToken.toJwt(),
+    token: accessToken.toJwt()
   };
 };
 
@@ -67,12 +71,13 @@ exports.createConference = function createConference(requestBody) {
 //Handles conference status callback events
 exports.confEventHandler = async function confEventHandler(event) {
   const syncMapID = "_" + event.CallSid;
-
+  console.log(`conf event for ${event.ConferenceSid}`);
+  console.log(event);
 
   //if a participant joined the conference, create sync map
   if (event.StatusCallbackEvent == "participant-join") {
-    console.log(`New participant call SID ${syncMapID} joined conference ${event.ConferenceSid}`);
-    // console.log("event: ", event);
+    // console.log(`New participant call SID ${syncMapID} joined conference ${event.ConferenceSid}`);
+
 
     try {
       //create sync map for this call sid
@@ -80,11 +85,11 @@ exports.confEventHandler = async function confEventHandler(event) {
         .syncMaps
         .create({ uniqueName: syncMapID, ttl: "600" });
 
-      console.log(`New sync map created: ${newSyncMap.sid} for ${syncMapID}`);
+      // console.log(`New sync map created: ${newSyncMap.sid} for ${syncMapID}`);
     }
 
     catch (err) {
-      console.log(`Sync map creation for ${syncMapID} failed: ${err}`);
+      // console.log(`Sync map creation for ${syncMapID} failed: ${err}`);
     }
 
     try {
@@ -107,7 +112,7 @@ exports.confEventHandler = async function confEventHandler(event) {
           }
         });
 
-      console.log(`new key ${newKey.key} added to ${syncMapID}`);
+      // console.log(`new key ${newKey.key} added to ${syncMapID}`);
     }
 
     catch (err) {
@@ -116,8 +121,8 @@ exports.confEventHandler = async function confEventHandler(event) {
   }
   //if this is an update about a participant, update map corresponding to that call leg
   else if (typeof event.CallSid !== 'undefined') {
-    console.log(`Update sync map for participant call SID ${syncMapID} joined conference ${event.ConferenceSid}`);
-    console.log("callsid event: ", event);
+    // console.log(`Update sync map for participant call SID ${syncMapID} joined conference ${event.ConferenceSid}`);
+    // console.log("callsid event: ", event);
     try {
       const sync_map_item = await client.sync.v1.services(config.syncServiceSid)
         .syncMaps(syncMapID)
@@ -136,7 +141,7 @@ exports.confEventHandler = async function confEventHandler(event) {
             StartConferenceOnEnter: event.StartConferenceOnEnter
           }
         });
-      console.log(`Sync map updated: ${sync_map_item.key}`);
+      // console.log(`Sync map updated: ${sync_map_item.key}`);
 
     }
     catch (err) {
@@ -177,7 +182,8 @@ exports.setUserState = async function setUserState(event) {
 
   console.log("user state change req rcvd: ", event);
 
-  const targetCall = await findCallInDB(event.target); //Read Twilio Asset to get Conf SID and other participant's SID.
+  //Retrieve call details from database
+  const targetCall = await findCallInDB(event.target, 'participantlabel');
   console.log(`Received call details for ${event.target}: ${targetCall}`);
 
   try {
@@ -199,6 +205,46 @@ exports.setUserState = async function setUserState(event) {
   }
 };
 
+//WORK ON THIS
+exports.mergeCalls = async function mergeCalls(event) {
+
+  console.log("merge users req rcvd: ", event);
+
+  //Retrieve target call from database
+  const targetCall = await findCallInDB(event.targetFriendlyName, 'participantlabel');
+  console.log(`Received call details for ${event.targetFriendlyName}: ${targetCall}`);
+  console.log("Conference to end 1", targetCall.conferencesid);
+
+  //Retrieve host call from database
+  const hostCall = await findCallInDB(event.hostCallSid, 'callsid');
+  console.log(`Received call details for ${event.hostCallSid}: ${hostCall}`);
+
+  //Retrieve host conference from database
+  const hostConference = await findConferenceInDB(hostCall.conferencesid, 'conferencesid');
+  console.log(`Received conference details for ${hostCall.conferencesid}: ${hostConference}`);
+
+  try {
+
+    //Add target user to host conference
+    await client.calls(targetCall.callsid)
+      .update({ twiml: `<Response><Dial><Conference>${hostConference.roomname}</Conference></Dial></Response>` })
+      .then(call => console.log(call.to));
+
+    console.log(`${event.targetFriendlyName} has been added to ${hostConference.roomname}`);
+    console.log("Conference to end 2", targetCall.conferencesid);
+
+
+    return {
+      'status': "success"
+    };
+
+  } catch (err) {
+    console.error("Error merging: ", err);
+    return {
+      'status': "failed"
+    };
+  }
+}
 
 //establishes conference
 async function startConference(twiml, fromLabel, to) {
@@ -215,7 +261,7 @@ async function startConference(twiml, fromLabel, to) {
       statusCallback: `${config.ngrokURL}/confEvents`,
       statusCallbackEvent: 'start end join leave mute hold modify',
       startConferenceOnEnter: 'true',
-      endConferenceOnExit: 'true',
+      endConferenceOnExit: 'false',
       participantLabel: fromLabel
     }, roomName);
 
@@ -227,7 +273,7 @@ async function startConference(twiml, fromLabel, to) {
       .create({
         earlyMedia: true,
         beep: 'onEnter',
-        endConferenceOnExit: "true",
+        endConferenceOnExit: "false",
         statusCallback: `${config.ngrokURL}/participantEvents`,
         statusCallbackEvent: ['initiated', 'ringing', 'answered', 'completed'],
         record: false,
@@ -285,17 +331,32 @@ function generateRoomName() {
   return "CR" + randString;
 }
 
-//find a call based on participant label
-async function findCallInDB(participantLabel) {
+//find a call in the database
+async function findCallInDB(callIdentifier, identifierType) {
 
   try {
-    const result = await Call.findByParticipantLabel(participantLabel);
-    console.log(`Found the call: ${result}`);
-    return (result);
+    const call = await Call.findCall(callIdentifier, identifierType);
+    console.log(`Found the call: ${call}`);
+    return (call);
   }
 
   catch (err) {
-    console.error(`Error in finding call for participant ${targetLabel}`);
+    console.error(`Error in finding call for ${callIdentifier}`);
+  }
+
+}
+
+//find a conference in the database
+async function findConferenceInDB(conferenceIdentifier, identifierType) {
+
+  try {
+    const conference = await Conference.findConference(conferenceIdentifier, identifierType);
+    console.log(`Found the conference: ${conference}`);
+    return (conference);
+  }
+
+  catch (err) {
+    console.error(`Error in finding conference for ${conferenceIdentifier}`);
   }
 
 }

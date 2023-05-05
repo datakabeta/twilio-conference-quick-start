@@ -45,6 +45,21 @@ class Conference {
             return Promise.reject(err);
         };
     }
+
+    static async findConference(confIdentifier, identifierType) {
+        const query = {
+            text: `SELECT * FROM conferences WHERE ${identifierType} = $1`,
+            values: [confIdentifier],
+        };
+
+        try {
+            const result = await pool.query(query);
+            return Promise.resolve(result.rows[0]);
+        } catch (err) {
+            return Promise.reject(err);
+        }
+    }
+
 }
 
 class Call {
@@ -73,10 +88,10 @@ class Call {
         };
     }
 
-    static async findByParticipantLabel(participantLabel) {
+    static async findCall(callIdentifier, identifierType) {
         const query = {
-            text: 'SELECT * FROM calls WHERE participantLabel = $1 AND isCallActive = $2',
-            values: [participantLabel, 'Y'],
+            text: `SELECT * FROM calls WHERE ${identifierType} = $1 AND isCallActive = $2`,
+            values: [callIdentifier, 'Y'],
         };
 
         try {
@@ -96,6 +111,21 @@ class Call {
         try {
             const result = await pool.query(query);
             return Promise.resolve(result.rows[0]);
+        } catch (err) {
+            return Promise.reject(err);
+        }
+    }
+
+    static async isCallActiveByParticipantLabel(participantLabel) {
+        const query = {
+            text: 'SELECT isCallActive FROM calls WHERE participantLabel = $1 AND isCallActive = $2',
+            values: [participantLabel, 'Y'],
+        };
+
+        try {
+            const result = await pool.query(query);
+            console.log("Result from iscallactive DB");
+            return Promise.resolve(result ? 'Y' : 'N');
         } catch (err) {
             return Promise.reject(err);
         }
